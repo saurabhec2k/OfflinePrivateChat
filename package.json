@@ -1,0 +1,16 @@
+{
+  "name": "antigravity-chat-app",
+  "version": "1.0.0",
+  "description": "Chat application with document and image upload connected to Ollama",
+  "scripts": {
+    "install:server": "cd server && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "install-all": "npm install && npm run install:server && npm run install:frontend",
+    "server": "cd server && node server.js",
+    "frontend": "cd frontend && npm run dev",
+    "dev": "concurrently --kill-others \"npm run server\" \"npm run frontend\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
