@@ -3,10 +3,11 @@ import {
   Paperclip, 
   Send, 
   Square, 
-  Image as ImageIcon, 
   FileText, 
+  FileAudio,
   X,
-  Loader
+  Loader,
+  Globe
 } from 'lucide-react';
 
 export default function ChatInput({
@@ -18,7 +19,9 @@ export default function ChatInput({
   queuedFiles,
   setQueuedFiles,
   onUploadDocumentFile,
-  activeDocuments
+  activeDocuments,
+  webSearch,
+  setWebSearch
 }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -46,7 +49,7 @@ export default function ChatInput({
   const processImage = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
+      reader.onload  = () => resolve(reader.result);
       reader.onerror = (error) => reject(error);
       reader.readAsDataURL(file);
     });
@@ -58,6 +61,7 @@ export default function ChatInput({
 
     for (const file of files) {
       const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+      const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|oga|flac|webm)$/i.test(file.name);
       
       if (isImage) {
         try {
@@ -67,41 +71,41 @@ export default function ChatInput({
             type: 'image',
             name: file.name,
             size: file.size,
-            dataUrl: dataUrl
+            dataUrl
           }]);
         } catch (err) {
-          console.error("Error loading image:", err);
           alert(`Failed to load image ${file.name}`);
         }
+      } else if (isAudio) {
+        try {
+          const dataUrl = await processImage(file);
+          setQueuedFiles(prev => [...prev, {
+            id: Math.random().toString(36).substring(7),
+            type: 'audio',
+            name: file.name,
+            size: file.size,
+            mimeType: file.type || 'audio/*',
+            dataUrl
+          }]);
+        } catch (err) {
+          alert(`Failed to load audio ${file.name}`);
+        }
       } else {
-        // Text Document parsing via Express
         const tempId = Math.random().toString(36).substring(7);
-        
-        // Add a loading/parsing state in queue
         setQueuedFiles(prev => [...prev, {
-          id: tempId,
-          type: 'doc',
-          name: file.name,
-          size: file.size,
-          parsing: true
+          id: tempId, type: 'doc', name: file.name, size: file.size, parsing: true
         }]);
-
         try {
           const parsedDoc = await onUploadDocumentFile(file);
-          // Update the queue state from parsing to loaded
-          setQueuedFiles(prev => 
+          setQueuedFiles(prev =>
             prev.map(f => f.id === tempId ? { ...f, parsing: false, docData: parsedDoc } : f)
           );
         } catch (err) {
-          console.error("Error parsing document:", err);
           alert(`Failed to parse document ${file.name}: ${err.message}`);
-          // Remove from queue on error
           setQueuedFiles(prev => prev.filter(f => f.id !== tempId));
         }
       }
     }
-    
-    // Clear input value to allow uploading same file again
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -114,17 +118,19 @@ export default function ChatInput({
     if (generating) return;
     if (!input.trim() && queuedFiles.length === 0) return;
 
-    // Separate images and docs in queue
     const images = queuedFiles.filter(f => f.type === 'image').map(f => f.dataUrl);
-    const docs = queuedFiles.filter(f => f.type === 'doc' && !f.parsing).map(f => f.docData);
+    const audios = queuedFiles.filter(f => f.type === 'audio').map(f => ({
+      name: f.name,
+      size: f.size,
+      mimeType: f.mimeType,
+      dataUrl: f.dataUrl
+    }));
+    const docs   = queuedFiles.filter(f => f.type === 'doc' && !f.parsing).map(f => f.docData);
 
-    onSendMessage(input, images, docs);
+    onSendMessage(input, images, docs, audios);
     setInput('');
     setQueuedFiles([]);
-    
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
   const activeDocsCount = activeDocuments.filter(d => d.active).length;
@@ -142,23 +148,23 @@ export default function ChatInput({
                     <img src={file.dataUrl} alt="thumbnail" className="queued-img-thumb" />
                     <span className="queued-file-name">{file.name}</span>
                   </>
+                ) : file.type === 'audio' ? (
+                  <>
+                    <FileAudio size={14} color="var(--accent-emerald)" style={{ flexShrink: 0 }} />
+                    <span className="queued-file-name">{file.name}</span>
+                  </>
                 ) : (
                   <>
-                    {file.parsing ? (
-                      <Loader size={14} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <FileText size={14} color="var(--accent-cyan)" />
-                    )}
+                    {file.parsing
+                      ? <Loader size={14} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                      : <FileText size={14} color="var(--accent-cyan)" style={{ flexShrink: 0 }} />
+                    }
                     <span className="queued-file-name" style={{ color: file.parsing ? 'var(--text-muted)' : 'inherit' }}>
-                      {file.name} {file.parsing && '(Parsing...)'}
+                      {file.name}{file.parsing ? ' (Parsing...)' : ''}
                     </span>
                   </>
                 )}
-                <button 
-                  type="button" 
-                  className="btn-remove-queued"
-                  onClick={() => removeQueuedFile(file.id)}
-                >
+                <button type="button" className="btn-remove-queued" onClick={() => removeQueuedFile(file.id)}>
                   <X size={10} />
                 </button>
               </div>
@@ -166,34 +172,48 @@ export default function ChatInput({
           </div>
         )}
 
-        {/* Input Text Form */}
+        {/* Input Form */}
         <form onSubmit={handleSubmit} className="input-form">
-          <button 
-            type="button" 
-            className="btn-attach" 
+          {/* Attach File Button */}
+          <button
+            type="button"
+            className="btn-attach"
             onClick={handleFileClick}
-            title="Attach file (PDF, DOCX, TXT, images)"
+            title="Attach file (PDF, DOCX, TXT, images, audio)"
             disabled={generating}
           >
             <Paperclip size={18} />
           </button>
-          
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            multiple 
-            style={{ display: 'none' }} 
-            accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp" 
+
+          {/* Web Search Toggle */}
+          <button
+            type="button"
+            className={`btn-web-search ${webSearch ? 'active' : ''}`}
+            onClick={() => setWebSearch(v => !v)}
+            title={webSearch ? 'Web search ON — click to disable' : 'Enable web search (DuckDuckGo)'}
+            disabled={generating}
+          >
+            <Globe size={18} />
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            multiple
+            style={{ display: 'none' }}
+            accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm,audio/*"
           />
 
           <textarea
             ref={textareaRef}
             className="chat-textarea"
             placeholder={
-              activeDocsCount > 0 
-                ? `Ask about your ${activeDocsCount} active document${activeDocsCount > 1 ? 's' : ''}...` 
-                : "Type a message or drag files..."
+              webSearch
+                ? '🌐 Web search enabled — ask anything...'
+                : activeDocsCount > 0
+                  ? `Ask about your ${activeDocsCount} active document${activeDocsCount > 1 ? 's' : ''}...`
+                  : 'Type a message or drag files...'
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -203,17 +223,12 @@ export default function ChatInput({
           />
 
           {generating ? (
-            <button 
-              type="button" 
-              className="btn-stop" 
-              onClick={onStopGeneration}
-              title="Stop generating"
-            >
+            <button type="button" className="btn-stop" onClick={onStopGeneration} title="Stop generating">
               <Square size={14} fill="currentColor" />
             </button>
           ) : (
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="btn-send"
               disabled={!input.trim() && queuedFiles.length === 0}
               title="Send message"
@@ -225,21 +240,20 @@ export default function ChatInput({
       </div>
 
       <div className="input-note">
-        {activeDocsCount > 0 && (
+        {webSearch && (
           <span style={{ color: 'var(--accent-cyan)', marginRight: '12px', fontWeight: 600 }}>
-            ✓ {activeDocsCount} active document{activeDocsCount > 1 ? 's' : ''} injected as prompt context
+            🌐 Live web search active
           </span>
         )}
-        Supports PDF, DOCX, TXT, MD and images. Model outputs depend on the selected Ollama model.
+        {activeDocsCount > 0 && (
+          <span style={{ color: 'var(--accent-emerald)', marginRight: '12px', fontWeight: 600 }}>
+            ✓ {activeDocsCount} document{activeDocsCount > 1 ? 's' : ''} in context
+          </span>
+        )}
+        Press <kbd style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px', fontSize: '0.7rem' }}>Enter</kbd> to send · <kbd style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px', fontSize: '0.7rem' }}>Shift+Enter</kbd> for new line
       </div>
-      
-      {/* Inline Spin CSS Helper */}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
+
+      <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
     </div>
   );
 }

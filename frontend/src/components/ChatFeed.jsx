@@ -1,131 +1,91 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { 
   Bot, 
   User, 
-  Copy, 
-  Check, 
   FileText, 
-  Image as ImageIcon,
-  Sparkles
+  FileAudio,
+  Sparkles,
+  ExternalLink,
+  Globe
 } from 'lucide-react';
+import { marked } from 'marked';
+import GraphCard from './GraphCard';
 
-// Code Block Component with Copy functionality
-function CodeBlock({ language, code }) {
-  const [copied, setCopied] = useState(false);
+// Configure marked GFM options
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  mangle: false,
+  headerIds: false
+});
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+// Create custom renderer to style tables and code blocks beautifully
+const renderer = new marked.Renderer();
 
-  return (
-    <div className="code-block-container">
-      <div className="code-block-header">
-        <span>{language.toUpperCase() || 'CODE'}</span>
-        <button className="btn-copy-code" onClick={handleCopy}>
-          {copied ? (
-            <>
-              <Check size={12} color="var(--accent-emerald)" />
-              <span style={{ color: 'var(--accent-emerald)' }}>Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={12} />
-              <span>Copy</span>
-            </>
-          )}
+renderer.code = (code, language) => {
+  const lang = language || 'code';
+  // Escape html characters to prevent script injection in the code block itself
+  const escapedCode = code
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+    
+  return `
+    <div class="code-block-container">
+      <div class="code-block-header">
+        <span>${lang.toUpperCase()}</span>
+        <button class="btn-copy-code" data-code="${escapedCode}">
+          Copy
         </button>
       </div>
-      <pre>
-        <code>{code}</code>
-      </pre>
+      <pre><code>${escapedCode}</code></pre>
     </div>
-  );
-}
+  `;
+};
 
-// Inline Style Parser (**bold** and `code`)
-function parseInlineStyles(str) {
-  // Matches markdown bold "**" or inline code "`"
-  const regex = /(\*\*.*?\*\*|`.*?`)/g;
-  const parts = str.split(regex);
+renderer.table = (header, body) => {
+  return `
+    <div class="table-container">
+      <table class="markdown-table">
+        <thead>${header}</thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `;
+};
 
-  return parts.map((part, idx) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+marked.use({ renderer });
+
+const extractGraphData = (content) => {
+  try {
+    if (!content || typeof content !== 'string') return null;
+
+    const match = content.match(/GRAPH_DATA:\s*(\{[\s\S]*?\})\s*$/i);
+    if (!match) return null;
+
+    const parsed = JSON.parse(match[1]);
+    // Validate structure to prevent rendering with missing data
+    if (parsed && parsed.chartType && parsed.title && parsed.labels && parsed.series) {
+      return parsed;
     }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={idx}>{part.slice(1, -1)}</code>;
-    }
-    return part;
-  });
-}
+    return null;
+  } catch (error) {
+    console.warn('Graph data parse error:', error.message);
+    return null;
+  }
+};
 
-// Paragraph/List Formatter
-function FormattedText({ text }) {
-  const paragraphs = text.split('\n\n');
-
-  return paragraphs.map((para, pIdx) => {
-    const trimmed = para.trim();
-    if (!trimmed) return null;
-
-    // Check if it's a heading
-    if (trimmed.startsWith('# ')) {
-      return <h1 key={pIdx} style={{ fontSize: '1.5rem', margin: '16px 0 8px', fontWeight: 'bold' }}>{parseInlineStyles(trimmed.slice(2))}</h1>;
-    }
-    if (trimmed.startsWith('## ')) {
-      return <h2 key={pIdx} style={{ fontSize: '1.25rem', margin: '14px 0 6px', fontWeight: 'bold' }}>{parseInlineStyles(trimmed.slice(3))}</h2>;
-    }
-    if (trimmed.startsWith('### ')) {
-      return <h3 key={pIdx} style={{ fontSize: '1.1rem', margin: '12px 0 6px', fontWeight: 'bold' }}>{parseInlineStyles(trimmed.slice(4))}</h3>;
-    }
-
-    const lines = trimmed.split('\n');
-    
-    // Check if it's a bullet list
-    const isBulletList = lines.every(line => line.trim().startsWith('- ') || line.trim().startsWith('* '));
-    if (isBulletList && lines.length > 0) {
-      return (
-        <ul key={pIdx} style={{ listStyleType: 'disc', paddingLeft: '20px', margin: '10px 0' }}>
-          {lines.map((line, lIdx) => (
-            <li key={lIdx} style={{ marginBottom: '4px' }}>
-              {parseInlineStyles(line.trim().substring(2))}
-            </li>
-          ))}
-        </ul>
-      );
-    }
-
-    // Check if it's a numbered list
-    const isNumberedList = lines.every(line => /^\d+\.\s/.test(line.trim()));
-    if (isNumberedList && lines.length > 0) {
-      return (
-        <ol key={pIdx} style={{ listStyleType: 'decimal', paddingLeft: '20px', margin: '10px 0' }}>
-          {lines.map((line, lIdx) => {
-            const content = line.trim().replace(/^\d+\.\s/, '');
-            return (
-              <li key={lIdx} style={{ marginBottom: '4px' }}>
-                {parseInlineStyles(content)}
-              </li>
-            );
-          })}
-        </ol>
-      );
-    }
-
-    // Regular paragraph (handling line breaks)
-    return (
-      <p key={pIdx} style={{ marginBottom: '10px', wordBreak: 'break-word' }}>
-        {lines.map((line, lIdx) => (
-          <React.Fragment key={lIdx}>
-            {parseInlineStyles(line)}
-            {lIdx < lines.length - 1 && <br />}
-          </React.Fragment>
-        ))}
-      </p>
-    );
-  });
-}
+const stripGraphData = (content) => {
+  try {
+    if (!content || typeof content !== 'string') return '';
+    return content.replace(/\s*GRAPH_DATA:\s*\{[\s\S]*?\}\s*$/i, '').trim();
+  } catch (error) {
+    console.warn('Strip graph data error:', error);
+    return content || '';
+  }
+};
 
 export default function ChatFeed({ messages, generating }) {
   const feedEndRef = useRef(null);
@@ -135,39 +95,52 @@ export default function ChatFeed({ messages, generating }) {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, generating]);
 
-  // Main Markdown Parser
-  const parseMarkdown = (text) => {
-    if (!text) return '';
-    
-    const parts = [];
-    const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      const index = match.index;
-      if (index > lastIndex) {
-        parts.push({ type: 'text', content: text.substring(lastIndex, index) });
+  // Click Handler for Event Delegation (Copy Button)
+  const handleFeedClick = (e) => {
+    const copyBtn = e.target.closest('.btn-copy-code');
+    if (copyBtn) {
+      const code = copyBtn.getAttribute('data-code');
+      if (code) {
+        navigator.clipboard.writeText(code);
+        
+        // Show "Copied!" feedback
+        const originalHTML = copyBtn.innerHTML;
+        copyBtn.innerHTML = 'Copied!';
+        copyBtn.style.color = 'var(--accent-emerald)';
+        
+        setTimeout(() => {
+          copyBtn.innerHTML = originalHTML;
+          copyBtn.style.color = '';
+        }, 1500);
       }
-      parts.push({ type: 'code', language: match[1] || 'code', content: match[2].trim() });
-      lastIndex = codeBlockRegex.lastIndex;
+    }
+  };
+
+  const renderMessageContent = (msg) => {
+    if (msg.content === '' && msg.role === 'assistant' && generating) {
+      return (
+        <div className="typing-indicator">
+          <div className="typing-dot"></div>
+          <div className="typing-dot"></div>
+          <div className="typing-dot"></div>
+        </div>
+      );
     }
 
-    if (lastIndex < text.length) {
-      parts.push({ type: 'text', content: text.substring(lastIndex) });
-    }
+    const cleanContent = stripGraphData(msg.content || '');
+    const graphData = msg.graphData || extractGraphData(msg.content || '');
+    const htmlContent = marked.parse(cleanContent || '');
 
-    return parts.map((part, index) => {
-      if (part.type === 'code') {
-        return <CodeBlock key={index} language={part.language} code={part.content} />;
-      } else {
-        return <FormattedText key={index} text={part.content} />;
-      }
-    });
+    return (
+      <>
+        <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        {graphData && <GraphCard data={graphData} />}
+      </>
+    );
   };
 
   return (
-    <div className="messages-feed">
+    <div className="messages-feed" onClick={handleFeedClick}>
       {messages.length === 0 ? (
         <div className="empty-chat">
           <div className="empty-icon">
@@ -185,19 +158,11 @@ export default function ChatFeed({ messages, generating }) {
               {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
             </div>
             <div className="message-bubble">
-              {/* Message Content Text */}
-              {msg.content === '' && msg.role === 'assistant' && generating ? (
-                <div className="typing-indicator">
-                  <div className="typing-dot"></div>
-                  <div className="typing-dot"></div>
-                  <div className="typing-dot"></div>
-                </div>
-              ) : (
-                parseMarkdown(msg.content)
-              )}
+              {/* Message Content HTML */}
+              {renderMessageContent(msg)}
 
               {/* Attachments inside this bubble */}
-              {((msg.images && msg.images.length > 0) || (msg.documents && msg.documents.length > 0)) && (
+              {((msg.images && msg.images.length > 0) || (msg.audios && msg.audios.length > 0) || (msg.documents && msg.documents.length > 0)) && (
                 <div className="msg-attachments">
                   {/* Images */}
                   {msg.images?.map((img, imgIdx) => (
@@ -208,6 +173,16 @@ export default function ChatFeed({ messages, generating }) {
                       className="msg-img-preview" 
                     />
                   ))}
+                  {/* Audio */}
+                  {msg.audios?.map((audio, audioIdx) => (
+                    <div key={audioIdx} className="msg-audio-ref">
+                      <div className="msg-audio-title">
+                        <FileAudio size={12} />
+                        <span>{audio.name}</span>
+                      </div>
+                      <audio controls src={audio.dataUrl} preload="metadata" />
+                    </div>
+                  ))}
                   {/* Documents */}
                   {msg.documents?.map((doc, docIdx) => (
                     <div key={docIdx} className="msg-doc-ref" title="Referenced in response prompt">
@@ -215,6 +190,44 @@ export default function ChatFeed({ messages, generating }) {
                       <span>{doc.name}</span>
                     </div>
                   ))}
+                </div>
+              )}
+              
+              {/* Web Search Source Cards */}
+              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                <div className="sources-section">
+                  <div className="sources-header">
+                    <Globe size={12} />
+                    <span>Web Sources</span>
+                  </div>
+                  <div className="sources-grid">
+                    {msg.sources.map((src, sIdx) => (
+                      <a
+                        key={sIdx}
+                        href={src.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="source-card"
+                        title={src.snippet}
+                      >
+                        <div className="source-card-title">
+                          <span>{src.title}</span>
+                          <ExternalLink size={11} style={{ flexShrink: 0 }} />
+                        </div>
+                        <div className="source-card-url">
+                          {src.url.replace(/^https?:\/\//, '').split('/')[0]}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Message Metrics */}
+              {msg.role === 'assistant' && msg.responseTime && (
+                <div className="message-metrics">
+                  <span>Generated in {msg.responseTime}s</span>
+                  {msg.isAborted && <span style={{ color: 'var(--accent-rose)', marginLeft: '4px' }}>(Stopped)</span>}
                 </div>
               )}
             </div>

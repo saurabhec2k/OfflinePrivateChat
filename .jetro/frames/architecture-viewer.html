@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 30px;
+            background: white;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 32px;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            font-size: 24px;
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-left: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        h3 {
+            font-size: 18px;
+            color: #555;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #666;
+        }
+
+        strong {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        ul {
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            color: #666;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #e74c3c;
+            font-size: 14px;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .tech-stack {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .tech-stack li {
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border-left: 4px solid #ffc107;
+        }
+
+        .scroll-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #f4f4f4;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        .section-divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #667eea, transparent);
+            margin: 40px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ Antigravity - Complete System Architecture</h1>
+        
+        <h2>1. Project Overview</h2>
+        <p><strong>Antigravity</strong> is a full-stack chat application that enables users to interact with local LLMs (via Ollama) while uploading and processing documents/images. The system emphasizes modularity, scalability, and clean separation of concerns.</p>
+        
+        <div class="tech-stack">
+            <h3>Tech Stack</h3>
+            <ul>
+                <li><strong>Frontend:</strong> React 18 + Vite (development) + React Router + Axios</li>
+                <li><strong>Backend:</strong> Express.js (Node.js) with middleware-driven architecture</li>
+                <li><strong>LLM Integration:</strong> Ollama (local, no API keys required)</li>
+                <li><strong>Document Processing:</strong> pdf-parse, mammoth (DOCX), sharp (images)</li>
+                <li><strong>File Handling:</strong> Multer for multipart uploads</li>
+                <li><strong>Development:</strong> Concurrently (parallel dev servers)</li>
+            </ul>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <h2>2. High-Level System Architecture</h2>
+        <pre>
+┌─────────────────────────────────────────────────────────┐
+│                   CLIENT (Browser)                      │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │         React SPA (Vite Dev Server)               │  │
+│  │  ┌──────────────┐  ┌──────────────┐               │  │
+│  │  │ ChatFeed.jsx │  │ ChatInput.jsx│  Sidebar.jsx  │  │
+│  │  └──────────────┘  └──────────────┘               │  │
+│  └───────────────────────────────────────────────────┘  │
+└────────────────────────┬────────────────────────────────┘
+                         │ HTTP/REST (CORS)
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│              EXPRESS.JS SERVER (Port 5000)              │
+│  Routes → Services → Middleware → Response             │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│              OLLAMA (Local LLM Server)                  │
+│              (Typically Port 11434)                     │
+└─────────────────────────────────────────────────────────┘
+        </pre>
+
+        <div class="section-divider"></div>
+
+        <h2>3. Key Layers</h2>
+
+        <h3>🌐 Frontend Layer</h3>
+        <ul>
+            <li><strong>Components:</strong> Reusable React components (ChatFeed, ChatInput, Sidebar)</li>
+            <li><strong>Services:</strong> API client layer (axios interceptors)</li>
+            <li><strong>Hooks:</strong> Custom React hooks (useChat, useDocuments)</li>
+            <li><strong>Utils:</strong> Formatting, validation, constants</li>
+        </ul>
+
+        <h3>🔧 Backend Layer</h3>
+        <ul>
+            <li><strong>Routes:</strong> API endpoints (/chat, /documents, /models, /health)</li>
+            <li><strong>Services:</strong> Business logic (ChatService, DocumentService, OllamaService)</li>
+            <li><strong>Middleware:</strong> CORS, logging, validation, error handling</li>
+            <li><strong>Utils:</strong> Config, logger, validators, error handlers</li>
+        </ul>
+
+        <h3>🦙 LLM Integration</h3>
+        <ul>
+            <li><strong>OllamaService:</strong> Handles all LLM operations</li>
+            <li><strong>Model Management:</strong> Pull, list, check models</li>
+            <li><strong>Generation:</strong> Stream responses with timeout handling</li>
+        </ul>
+
+        <div class="section-divider"></div>
+
+        <h2>4. API Endpoints</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>POST</td>
+                    <td>/api/chat</td>
+                    <td>Send message to LLM</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/chat/conversations</td>
+                    <td>List all conversations</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/chat/:id</td>
+                    <td>Get messages in conversation</td>
+                </tr>
+                <tr>
+                    <td>DELETE</td>
+                    <td>/api/chat/:id</td>
+                    <td>Delete conversation</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>/api/documents/upload</td>
+                    <td>Upload file</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/documents</td>
+                    <td>List documents</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/models</td>
+                    <td>List available models</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/health</td>
+                    <td>System health check</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="section-divider"></div>
+
+        <h2>5. Data Flow</h2>
+
+        <h3>💬 Chat Message Flow</h3>
+        <pre>User Input → ChatService → Ollama → Response → UI Update</pre>
+
+        <h3>📄 Document Upload Flow</h3>
+        <pre>File Select → Upload → Parsing → Content Storage → List Update</pre>
+
+        <div class="section-divider"></div>
+
+        <h2>6. State Management</h2>
+        <div class="highlight">
+            <strong>Frontend State (Context + Hooks):</strong>
+            <ul style="margin-top: 10px;">
+                <li>ChatContext - conversations, messages, loading state</li>
+                <li>DocumentContext - documents, upload status</li>
+                <li>ModelContext - available models, active model</li>
+            </ul>
+        </div>
+
+        <h2>7. Error Handling</h2>
+        <ul>
+            <li><strong>Input Validation:</strong> 400 Bad Request</li>
+            <li><strong>Not Found:</strong> 404 Resource not found</li>
+            <li><strong>Service Errors:</strong> 500 Internal Server Error</li>
+            <li><strong>Ollama Issues:</strong> 503 Service Unavailable</li>
+        </ul>
+
+        <div class="section-divider"></div>
+
+        <h2>8. Security Features</h2>
+        <ul>
+            <li>✅ CORS configuration for origin validation</li>
+            <li>✅ Input validation on server-side</li>
+            <li>✅ File type and size validation</li>
+            <li>✅ Secure error messages (no stack traces)</li>
+            <li>✅ Environment-based configuration</li>
+        </ul>
+
+        <div class="section-divider"></div>
+
+        <h2>9. Scalability Path</h2>
+        <div class="highlight">
+            <strong>Phase 1 (Current):</strong> Single server, in-memory storage
+            <br><strong>Phase 2:</strong> Database integration, Redis caching
+            <br><strong>Phase 3:</strong> Multi-server, load balancing, CDN
+        </div>
+
+        <h2>10. Performance Optimizations</h2>
+        <ul>
+            <li>Code splitting in React</li>
+            <li>Request timeout handling</li>
+            <li>Async document processing</li>
+            <li>Response caching headers</li>
+            <li>Compression enabled</li>
+        </ul>
+
+        <div class="scroll-indicator">📚 Complete documentation</div>
+    </div>
+</body>
+</html>

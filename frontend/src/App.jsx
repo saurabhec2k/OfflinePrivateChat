@@ -36,6 +36,7 @@ export default function App() {
   const [queuedFiles, setQueuedFiles] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [webSearch, setWebSearch] = useState(false);
 
   // References
   const abortControllerRef = useRef(null);
@@ -210,9 +211,61 @@ export default function App() {
     }));
   };
 
+  const extractGraphData = (text) => {
+    try {
+      const match = text.match(/GRAPH_DATA:\s*(\{[\s\S]*?\})\s*$/i);
+      if (!match) return null;
+
+      const jsonStr = match[1];
+      const parsed = JSON.parse(jsonStr);
+      
+      // Validate structure
+      if (parsed.chartType && parsed.title && parsed.labels && parsed.series) {
+        return parsed;
+      }
+      return null;
+    } catch (error) {
+      console.warn('Graph data extraction error:', error.message);
+      return null;
+    }
+  };
+
+  const stripGraphData = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    return text.replace(/\s*GRAPH_DATA:\s*\{[\s\S]*?\}\s*$/i, '').trim();
+  };
+
+  // Helper to update specific assistant message metadata fields
+  const updateAssistantMetadata = (chatId, messageId, metadata) => {
+    setConversations(prev => prev.map(chat => {
+      if (chat.id === chatId) {
+        return {
+          ...chat,
+          messages: chat.messages.map(m => 
+            m.id === messageId ? { ...m, ...metadata } : m
+          )
+        };
+      }
+      return chat;
+    }));
+  };
+
   // --- Streaming Generation Handler ---
-  const handleSendMessage = async (text, attachedImages, attachedDocs) => {
+  const handleSendMessage = async (text, attachedImages, attachedDocs, attachedAudios = []) => {
     if (!activeChatId) return;
+
+    const activeDocsForPrompt = activeDocuments
+      .filter(d => d.active)
+      .map(d => ({ name: d.name, text: d.text }));
+    const attachedDocsForPrompt = attachedDocs
+      .filter(Boolean)
+      .map(d => ({ name: d.name, text: d.text }));
+    const docsForPrompt = [
+      ...activeDocsForPrompt,
+      ...attachedDocsForPrompt.filter(
+        doc => !activeDocsForPrompt.some(activeDoc => activeDoc.name === doc.name)
+      )
+    ];
 
     // Create unique message IDs
     const userMsgId = Math.random().toString(36).substring(7);
@@ -224,6 +277,7 @@ export default function App() {
       role: 'user',
       content: text,
       images: attachedImages.length > 0 ? attachedImages : undefined,
+      audios: attachedAudios.length > 0 ? attachedAudios : undefined,
       documents: attachedDocs.length > 0 ? attachedDocs : undefined
     };
 
@@ -232,7 +286,7 @@ export default function App() {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
-      documents: activeDocuments.filter(d => d.active).map(d => ({ name: d.name })) // referenced documents
+      documents: docsForPrompt.map(d => ({ name: d.name })) // referenced documents
     };
 
     // 3. Update Conversation with User & Assistant message placeholders
@@ -249,6 +303,7 @@ export default function App() {
     }
 
     setGenerating(true);
+    const startTime = Date.now();
 
     // Initialize controller for Stop Action
     const controller = new AbortController();
@@ -264,9 +319,16 @@ export default function App() {
           prompt: text,
           systemPrompt,
           temperature,
-          history: messages, // Send existing history (excluding current userMsg)
-          documents: activeDocuments.filter(d => d.active).map(d => ({ name: d.name, text: d.text })),
-          images: attachedImages
+          history: messages,
+          documents: docsForPrompt,
+          images: attachedImages,
+          audios: attachedAudios.map(({ name, size, mimeType, dataUrl }) => ({
+            name,
+            size,
+            mimeType,
+            dataUrl
+          })),
+          webSearch
         }),
         signal: controller.signal
       });
@@ -298,8 +360,16 @@ export default function App() {
           
           try {
             const data = JSON.parse(trimmed);
-            if (data.response) {
+            if (data.__meta && data.searchResults) {
+              // Metadata line — attach search sources to the assistant message
+              updateAssistantMetadata(activeChatId, assistantMsgId, { sources: data.searchResults });
+            } else if (data.response) {
               assistantText += data.response;
+              const graphData = extractGraphData(assistantText);
+              if (graphData) {
+                updateAssistantMetadata(activeChatId, assistantMsgId, { graphData });
+                assistantText = stripGraphData(assistantText);
+              }
               updateAssistantText(activeChatId, assistantMsgId, assistantText);
             }
           } catch (e) {
@@ -312,8 +382,15 @@ export default function App() {
       if (buffer.trim()) {
         try {
           const data = JSON.parse(buffer.trim());
-          if (data.response) {
+          if (data.__meta && data.searchResults) {
+            updateAssistantMetadata(activeChatId, assistantMsgId, { sources: data.searchResults });
+          } else if (data.response) {
             assistantText += data.response;
+            const graphData = extractGraphData(assistantText);
+            if (graphData) {
+              updateAssistantMetadata(activeChatId, assistantMsgId, { graphData });
+              assistantText = stripGraphData(assistantText);
+            }
             updateAssistantText(activeChatId, assistantMsgId, assistantText);
           }
         } catch (e) {
@@ -321,9 +398,16 @@ export default function App() {
         }
       }
 
+      const durationMs = Date.now() - startTime;
+      const durationSec = (durationMs / 1000).toFixed(1);
+      updateAssistantMetadata(activeChatId, assistantMsgId, { responseTime: durationSec });
+
     } catch (error) {
+      const durationMs = Date.now() - startTime;
+      const durationSec = (durationMs / 1000).toFixed(1);
       if (error.name === 'AbortError') {
         console.log('Generation aborted.');
+        updateAssistantMetadata(activeChatId, assistantMsgId, { responseTime: durationSec, isAborted: true });
       } else {
         console.error('Chat error:', error);
         updateAssistantText(
@@ -331,6 +415,7 @@ export default function App() {
           assistantMsgId, 
           `⚠️ **Error generating response:** ${error.message}`
         );
+        updateAssistantMetadata(activeChatId, assistantMsgId, { responseTime: durationSec });
       }
     } finally {
       setGenerating(false);
@@ -418,6 +503,8 @@ export default function App() {
           setQueuedFiles={setQueuedFiles}
           onUploadDocumentFile={handleUploadDocumentFile}
           activeDocuments={activeDocuments}
+          webSearch={webSearch}
+          setWebSearch={setWebSearch}
         />
       </main>
     </div>

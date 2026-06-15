@@ -198,7 +198,7 @@ export default function Sidebar({
                   className="setting-input" 
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder="e.g., http://192.168.1.39:11434"
+                  placeholder="e.g., http://localhost:11434"
                 />
               </div>
 
